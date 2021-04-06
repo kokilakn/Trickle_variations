@@ -247,7 +247,7 @@
  * \retval 0 Suppress
  */
 #define TRICKLE_TIMER_PROTO_TX_ALLOW(tt) \
-  (TRICKLE_TIMER_SUPPRESSION_DISABLED(tt) || ((tt)->c < (tt)->k))
+  (TRICKLE_TIMER_SUPPRESSION_DISABLED(tt) || ((tt)->c < (tt)->kn))
 
 /**
  * \brief Determines whether the protocol must suppress a transmission
@@ -258,7 +258,7 @@
  * \retval 0 Go ahead with TX
  */
 #define TRICKLE_TIMER_PROTO_TX_SUPPRESS(tt) \
-  (TRICKLE_TIMER_SUPPRESSION_ENABLED(tt) && ((tt)->c >= (tt)->k))
+  (TRICKLE_TIMER_SUPPRESSION_ENABLED(tt) && ((tt)->c >= (tt)->kn))
 
 /**
  * \brief Returns a timer's maximum interval size (Imin << Imax) as a number of
@@ -364,6 +364,7 @@ struct trickle_timer {
   clock_time_t i_min;     /**< Imin: Clock ticks */
   clock_time_t i_cur;     /**< I: Current interval in clock_ticks */
   clock_time_t i_start;   /**< Start of this interval (absolute clock_time) */
+  clock_time_t t;
   clock_time_t i_max_abs; /**< Maximum interval size in clock ticks (and not in
                                number of doublings). This is a cached value of
                                Imin << Imax used internally, so that we can
@@ -376,6 +377,7 @@ struct trickle_timer {
                                protocol's callback */
   uint8_t i_max;          /**< Imax: Max number of doublings */
   uint8_t k;              /**< k: Redundancy Constant */
+  uint8_t kn;              /**< kn: Redundancy Constant */
   uint8_t c;              /**< c: Consistency Counter */
 };
 /** @} */
