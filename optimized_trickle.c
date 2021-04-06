@@ -164,6 +164,17 @@ get_t(clock_time_t i_cur)
 
   return i_cur + (tt_rand() % i_cur);
 }
+
+// to change t from step 6
+static clock_time_t
+get_t_(struct trickle_timer *tt)
+{
+
+  PRINTF("trickle_timer get t: [0, %lu)\n", 0,
+         (unsigned long)tt->i_min);
+
+  return 0 + (tt_rand() % tt->i_cur);
+}
 /*---------------------------------------------------------------------------*/
 static void
 schedule_for_end(struct trickle_timer *tt)
@@ -287,10 +298,25 @@ fire(void *ptr)
 static void
 new_interval(struct trickle_timer *tt)
 {
-  tt->c = 0;
-
   /* Random t in [I/2, I) */
   loc_clock = get_t(tt->i_cur);
+
+  ctimer_set(&tt->ct, loc_clock, fire, tt);
+
+  /* Store the actual interval start (absolute time), we need it later */
+  tt->i_start = tt->ct.etimer.timer.start;
+  PRINTF("trickle_timer new interval: at %lu, ends %lu, ",
+         (unsigned long)clock_time(),
+         (unsigned long)TRICKLE_TIMER_INTERVAL_END(tt));
+  PRINTF("t=%lu, I=%lu\n", (unsigned long)loc_clock, (unsigned long)tt->i_cur);
+}
+
+static void
+new_interval_(struct trickle_timer *tt)
+{
+
+  /* Random t in [I/2, I) */
+  loc_clock = get_t_(tt);
 
   ctimer_set(&tt->ct, loc_clock, fire, tt);
 
@@ -321,8 +347,8 @@ trickle_timer_inconsistency(struct trickle_timer *tt)
   if(tt->i_cur != tt->i_min) {
     PRINTF("trickle_timer inconsistency\n");
     tt->i_cur = tt->i_min;
-
-    new_interval(tt);
+    tt->c = 0;
+    new_interval_(tt);
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -391,6 +417,7 @@ trickle_timer_set(struct trickle_timer *tt, trickle_timer_cb_t proto_cb,
   /* Random I in [Imin , Imax] */
   tt->i_cur = tt->i_min +
     (tt_rand() % (TRICKLE_TIMER_INTERVAL_MAX(tt) - tt->i_min + 1));
+  tt->c = 0;
 
   PRINTF("trickle_timer set: I=%lu in [%lu , %lu]\n", (unsigned long)tt->i_cur,
          (unsigned long)tt->i_min,
