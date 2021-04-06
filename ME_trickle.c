@@ -153,17 +153,17 @@ max_imax(clock_time_t value)
 }
 #endif /* TRICKLE_TIMER_ERROR_CHECKING */
 /*---------------------------------------------------------------------------*/
-/* Returns a random time point t in [0 , I) */
+/* Returns a random time point t in [I/2 , I) */
 static clock_time_t
 get_t(clock_time_t i_cur)
 {
+  i_cur >>= 1;
 
-  PRINTF("trickle_timer get t: (0, %lu)\n",
+  PRINTF("trickle_timer get t: [%lu, %lu)\n", (unsigned long)i_cur,
          (unsigned long)(i_cur << 1));
 
-  return 1 + (tt_rand() % i_cur);
+  return i_cur + (tt_rand() % i_cur);
 }
-
 /*---------------------------------------------------------------------------*/
 static void
 schedule_for_end(struct trickle_timer *tt)
@@ -191,7 +191,7 @@ schedule_for_end(struct trickle_timer *tt)
 static void
 double_interval(void *ptr)
 {
-  clock_time_t last_end,Inz;
+  clock_time_t last_end;
 
   /* 'cast' ptr to a struct trickle_timer */
   loctt = (struct trickle_timer *)ptr;
@@ -205,23 +205,20 @@ double_interval(void *ptr)
   /* Remember the previous interval's end (absolute time), before we double */
   last_end = TRICKLE_TIMER_INTERVAL_END(loctt);
 
-  /* We may have I > Imax/2 but I <> Imax, in which case we set to Imax
-   * This will happen when I didn't start as Imin (before the first reset) */
-  loctt->i_cur = TRICKLE_TIMER_INTERVAL_MAX(loctt);
-  PRINTF("I = Imax = %lu\n", (unsigned long)loctt->i_cur);
+  /* Double the interval if we have to */
+  if(loctt->i_cur <= TRICKLE_TIMER_INTERVAL_MAX(loctt) >> 1) {
+    /* If I <= Imax/2, we double */
+    loctt->i_cur <<= 1;
+    PRINTF("I << 1 = %lu\n", (unsigned long)loctt->i_cur);
+  } else {
+    /* We may have I > Imax/2 but I <> Imax, in which case we set to Imax
+     * This will happen when I didn't start as Imin (before the first reset) */
+    loctt->i_cur = TRICKLE_TIMER_INTERVAL_MAX(loctt);
+    PRINTF("I = Imax = %lu\n", (unsigned long)loctt->i_cur);
+  }
 
-
-  /* Random t in (0, I) */
+  /* Random t in [I/2, I) */
   loc_clock = get_t(loctt->i_cur);
-  Inz = loc_clock - loctt->t;
-  if(Inz > loctt->i_cur) {
-    loctt->kn = (loctt->k * (2* (Inz-loctt->i_cur))/loctt->i_cur);
-  }
-  else{
-    loctt->kn = loctt->k;
-  }
-  loctt->t = loc_clock;
-
 
   PRINTF("trickle_timer doubling: t=%lu\n", (unsigned long)loc_clock);
 
@@ -280,8 +277,6 @@ fire(void *ptr)
     loctt->cb(loctt->cb_arg, TRICKLE_TIMER_PROTO_TX_ALLOW(loctt));
   }
 
-  loctt->c =0;
-
   if(trickle_timer_is_running(loctt)) {
     schedule_for_end(loctt);
   }
@@ -292,9 +287,10 @@ fire(void *ptr)
 static void
 new_interval(struct trickle_timer *tt)
 {
+  tt->c = 0;
+
   /* Random t in [I/2, I) */
   loc_clock = get_t(tt->i_cur);
-  tt->t = loc_clock;
 
   ctimer_set(&tt->ct, loc_clock, fire, tt);
 
@@ -305,8 +301,6 @@ new_interval(struct trickle_timer *tt)
          (unsigned long)TRICKLE_TIMER_INTERVAL_END(tt));
   PRINTF("t=%lu, I=%lu\n", (unsigned long)loc_clock, (unsigned long)tt->i_cur);
 }
-
-
 /*---------------------------------------------------------------------------*/
 /* Functions to be called by the protocol implementation */
 /*---------------------------------------------------------------------------*/
@@ -327,7 +321,7 @@ trickle_timer_inconsistency(struct trickle_timer *tt)
   if(tt->i_cur != tt->i_min) {
     PRINTF("trickle_timer inconsistency\n");
     tt->i_cur = tt->i_min;
-    tt->c = 0;
+
     new_interval(tt);
   }
 }
@@ -372,7 +366,6 @@ trickle_timer_config(struct trickle_timer *tt, clock_time_t i_min,
   tt->i_max = i_max;
   tt->i_max_abs = i_min << i_max;
   tt->k = k;
-  tt->kn = k;
 
   PRINTF("trickle_timer config: Imin=%lu, Imax=%u, k=%u\n",
          (unsigned long)tt->i_min, tt->i_max, tt->k);
@@ -398,7 +391,6 @@ trickle_timer_set(struct trickle_timer *tt, trickle_timer_cb_t proto_cb,
   /* Random I in [Imin , Imax] */
   tt->i_cur = tt->i_min +
     (tt_rand() % (TRICKLE_TIMER_INTERVAL_MAX(tt) - tt->i_min + 1));
-  tt->c = 0;
 
   PRINTF("trickle_timer set: I=%lu in [%lu , %lu]\n", (unsigned long)tt->i_cur,
          (unsigned long)tt->i_min,
